@@ -4,7 +4,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/seventy6/theauthapi-go-sdk/theauthapi"
+	"github.com/seventy6/theauthapi-go-sdk"
 )
 
 func main() {
