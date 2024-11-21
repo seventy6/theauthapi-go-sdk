@@ -86,7 +86,7 @@ func (c *Client) sendRequest(ctx context.Context, method, path string, body inte
 
 	// Set headers
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.AccessKey))
+	req.Header.Set("x-api-key", fmt.Sprintf(c.AccessKey))
 
 	// Send request
 	return c.HTTPClient.Do(req)
