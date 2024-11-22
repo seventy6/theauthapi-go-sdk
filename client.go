@@ -12,26 +12,35 @@ import (
 
 // Client is the main TheAuthAPI client
 type Client struct {
-	BaseURL    string
-	AccessKey  string
-	HTTPClient *http.Client
-	ApiKeys    *ApiKeysService
-	Projects   *ProjectsService
-	Accounts   *AccountsService
+	AccessToken string
+	BaseURL     string
+	HTTPClient  *http.Client
+	ApiKeys     *ApiKeysService
+	Projects    *ProjectsService
+	Accounts    *AccountsService
 }
 
 // ClientOption allows customizing the client
 type ClientOption func(*Client)
 
+// WithAccessToken sets the access token for the client
+func WithAccessToken(accessToken string) ClientOption {
+	return func(c *Client) {
+			c.AccessToken = accessToken
+			c.HTTPClient.Transport = &authTransport{
+					underlyingTransport: http.DefaultTransport,
+					accessToken:         accessToken,
+			}
+	}
+}
 // NewClient creates a new TheAuthAPI client with optional configurations
-func NewClient(accessKey string, opts ...ClientOption) *Client {
+func NewClient(opts ...ClientOption) *Client {
 	// Default configuration
 	client := &Client{
 		BaseURL: "https://api.theauthapi.com",
 		HTTPClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
-		AccessKey: accessKey,
 	}
 
 	// Apply custom options
@@ -45,6 +54,18 @@ func NewClient(accessKey string, opts ...ClientOption) *Client {
 	client.Accounts = &AccountsService{client: client}
 
 	return client
+}
+
+
+// authTransport is a custom RoundTripper that adds the x-api-key header
+type authTransport struct {
+	underlyingTransport http.RoundTripper
+	accessToken         string
+}
+
+func (t *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	req.Header.Set("x-api-key", t.accessToken)
+	return t.underlyingTransport.RoundTrip(req)
 }
 
 // WithBaseURL allows overriding the base API URL (useful for testing)
@@ -86,7 +107,7 @@ func (c *Client) sendRequest(ctx context.Context, method, path string, body inte
 
 	// Set headers
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-api-key", fmt.Sprintf(c.AccessKey))
+	req.Header.Set("x-api-key", fmt.Sprintf(c.AccessToken))
 
 	// Send request
 	return c.HTTPClient.Do(req)

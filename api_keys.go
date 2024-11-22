@@ -5,8 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
-	"os"
 
 	"github.com/joho/godotenv"
 )
@@ -21,70 +21,34 @@ type ApiKeysService struct {
     client *Client
 }
 
-func (s *ApiKeysService) IsValidKey(ctx context.Context, key string) (bool, error) {
-    accessToken := os.Getenv("ACCESS_TOKEN")
-    if accessToken == "" {
-        return false, fmt.Errorf("access token is not set")
-    }
-
+func (s *ApiKeysService) IsValidKey(ctx context.Context, key string) (string, error) {
     req, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/api-keys/auth/%s", s.client.BaseURL, key), nil)
     if err != nil {
-        return false, err
+        return "", err
     }
-    req.Header.Set("x-api-key", accessToken)
+    req.Header.Set("x-api-key", s.client.AccessToken)
 
     resp, err := s.client.HTTPClient.Do(req)
     if err != nil {
-        return false, err
+        return "", err
     }
     defer resp.Body.Close()
 
-    if resp.StatusCode != http.StatusOK {
-        return false, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+    // Read the body once
+    bodyBytes, err := io.ReadAll(resp.Body)
+    if err != nil {
+        return "", err
     }
 
+    // Use the bytes for both JSON decoding and string conversion
     var result struct {
         Valid bool `json:"valid"`
     }
-    if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-        return false, err
+    if err := json.NewDecoder(bytes.NewReader(bodyBytes)).Decode(&result); err != nil {
+        return "", err
     }
 
-    return result.Valid, nil
-}
+    bodyString := string(bodyBytes)
 
-func (s *ApiKeysService) CreateKey(ctx context.Context, opts ApiKeyInput) (*ApiKey, error) {
-    accessToken := os.Getenv("ACCESS_TOKEN")
-    if accessToken == "" {
-        return nil, fmt.Errorf("access token is not set")
-    }
-
-    body, err := json.Marshal(opts)
-    if err != nil {
-        return nil, err
-    }
-
-    req, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/api-keys/", s.client.BaseURL), bytes.NewBuffer(body))
-    if err != nil {
-        return nil, err
-    }
-    req.Header.Set("Content-Type", "application/json")
-    req.Header.Set("x-api-key", accessToken)
-
-    resp, err := s.client.HTTPClient.Do(req)
-    if err != nil {
-        return nil, err
-    }
-    defer resp.Body.Close()
-
-    if resp.StatusCode != http.StatusCreated {
-        return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-    }
-
-    var apiKey ApiKey
-    if err := json.NewDecoder(resp.Body).Decode(&apiKey); err != nil {
-        return nil, err
-    }
-
-    return &apiKey, nil
+    return bodyString, err
 }
