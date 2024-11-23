@@ -31,8 +31,6 @@ type ApiKeysAuthResponse struct {
 	CreationContext interface{}       `json:"creationContext"`
 }
 
-func GetValidKey(ctx context.Context, key string)
-
 func (s *ApiKeysService) IsValidKey(ctx context.Context, key string) error {
 	resp, err := s.client.sendRequest(ctx, http.MethodGet, fmt.Sprintf(PathApiKeysAuth, ""), nil)
 	if err != nil {
