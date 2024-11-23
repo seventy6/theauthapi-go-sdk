@@ -1,54 +1,57 @@
 package theauthapi
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
-
-	"github.com/joho/godotenv"
+	"time"
 )
 
-func init() {
-    // Load environment variables from .env file
-    if err := godotenv.Load(".env"); err != nil {
-        panic("Error 1 loading .env file")
-    }
-}
+var (
+	ErrKeyInvalid = errors.New("key is invalid")
+)
+
 type ApiKeysService struct {
-    client *Client
+	client *Client
+	debug  bool
 }
 
-func (s *ApiKeysService) IsValidKey(ctx context.Context, key string) (string, error) {
-    req, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/api-keys/auth/%s", s.client.BaseURL, key), nil)
-    if err != nil {
-        return "", err
-    }
-    req.Header.Set("x-api-key", s.client.AccessToken)
+type ApiKeysAuthResponse struct {
+	Key             string            `json:"key"`
+	Name            string            `json:"name"`
+	CustomMetaData  map[string]string `json:"customMetaData"`
+	CustomAccountID map[string]string `json:"customAccountId"`
+	CustomUserID    string            `json:"customUserId"`
+	Env             string            `json:"env"`
+	CreatedAt       time.Time         `json:"createdAt"`
+	UpdatedAt       time.Time         `json:"updatedAt"`
+	Active          bool              `json:"isActive"`
+	ExpiresAt       time.Time         `json:"expiresAt"`
+	RateLimitConfig interface{}       `json:"rateLimitConfig"`
+	CreationContext interface{}       `json:"creationContext"`
+}
 
-    resp, err := s.client.HTTPClient.Do(req)
-    if err != nil {
-        return "", err
-    }
-    defer resp.Body.Close()
+func (s *ApiKeysService) IsValidKey(ctx context.Context, key string) error {
+	resp, err := s.client.sendRequest(ctx, http.MethodGet, fmt.Sprintf(PathApiKeysAuth, key), nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
 
-    // Read the body once
-    bodyBytes, err := io.ReadAll(resp.Body)
-    if err != nil {
-        return "", err
-    }
+	if s.debug {
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			log.Printf("error reading body: %v \n", err)
+		}
+		log.Println("body: ", string(body))
+	}
 
-    // Use the bytes for both JSON decoding and string conversion
-    var result struct {
-        Valid bool `json:"valid"`
-    }
-    if err := json.NewDecoder(bytes.NewReader(bodyBytes)).Decode(&result); err != nil {
-        return "", err
-    }
+	if resp.StatusCode != http.StatusOK {
+		return ErrKeyInvalid
+	}
 
-    bodyString := string(bodyBytes)
-
-    return bodyString, err
+	return nil
 }

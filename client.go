@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 )
@@ -18,6 +19,8 @@ type Client struct {
 	ApiKeys     *ApiKeysService
 	Projects    *ProjectsService
 	Accounts    *AccountsService
+
+	debug bool
 }
 
 // ClientOption allows customizing the client
@@ -26,13 +29,14 @@ type ClientOption func(*Client)
 // WithAccessToken sets the access token for the client
 func WithAccessToken(accessToken string) ClientOption {
 	return func(c *Client) {
-			c.AccessToken = accessToken
-			c.HTTPClient.Transport = &authTransport{
-					underlyingTransport: http.DefaultTransport,
-					accessToken:         accessToken,
-			}
+		c.AccessToken = accessToken
+		c.HTTPClient.Transport = &authTransport{
+			underlyingTransport: http.DefaultTransport,
+			accessToken:         accessToken,
+		}
 	}
 }
+
 // NewClient creates a new TheAuthAPI client with optional configurations
 func NewClient(opts ...ClientOption) *Client {
 	// Default configuration
@@ -49,13 +53,21 @@ func NewClient(opts ...ClientOption) *Client {
 	}
 
 	// Initialize services
-	client.ApiKeys = &ApiKeysService{client: client}
-	client.Projects = &ProjectsService{client: client}
-	client.Accounts = &AccountsService{client: client}
+	client.ApiKeys = &ApiKeysService{
+		client: client,
+		debug:  client.debug,
+	}
+	client.Projects = &ProjectsService{
+		client: client,
+		debug:  client.debug,
+	}
+	client.Accounts = &AccountsService{
+		client: client,
+		debug:  client.debug,
+	}
 
 	return client
 }
-
 
 // authTransport is a custom RoundTripper that adds the x-api-key header
 type authTransport struct {
@@ -82,6 +94,12 @@ func WithHTTPClient(httpClient *http.Client) ClientOption {
 	}
 }
 
+func WithDebug() ClientOption {
+	return func(c *Client) {
+		c.debug = true
+	}
+}
+
 // sendRequest is a helper method to send HTTP requests
 func (c *Client) sendRequest(ctx context.Context, method, path string, body interface{}) (*http.Response, error) {
 	// Serialize request body
@@ -103,6 +121,10 @@ func (c *Client) sendRequest(ctx context.Context, method, path string, body inte
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	if c.debug {
+		log.Println("DEBUG: request: ", req)
 	}
 
 	// Set headers

@@ -5,14 +5,15 @@ import (
 )
 
 type AccountsService struct {
-    client *Client
+	client *Client
+	debug  bool
 }
 
 // ... existing code ...
 
 func (s *AccountsService) List(ctx context.Context) error {
-    // Method implementation
-    return nil
+	// Method implementation
+	return nil
 }
 
 // Add account-related methods
