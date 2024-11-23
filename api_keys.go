@@ -2,6 +2,7 @@ package theauthapi
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -32,6 +33,35 @@ type ApiKeysAuthResponse struct {
 	ExpiresAt       time.Time         `json:"expiresAt"`
 	RateLimitConfig interface{}       `json:"rateLimitConfig"`
 	CreationContext interface{}       `json:"creationContext"`
+}
+
+func (s *ApiKeysService) GetValidKey(ctx context.Context, key string) (*ApiKeysAuthResponse, error) {
+	resp, err := s.client.sendRequest(ctx, http.MethodGet, fmt.Sprintf(PathApiKeysAuth, key), nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if s.debug {
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			log.Printf("error reading body: %v \n", err)
+		}
+		log.Println("body: ", string(body))
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, ErrKeyInvalid
+	}
+
+	apiResp := &ApiKeysAuthResponse{}
+	err = json.NewDecoder(resp.Body).Decode(apiResp)
+	if err != nil {
+		return nil, err
+	}
+
+	return apiResp, nil
+
 }
 
 func (s *ApiKeysService) IsValidKey(ctx context.Context, key string) error {
