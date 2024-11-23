@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"log"
 	"net/http"
 	"time"
 )
@@ -14,6 +16,7 @@ var (
 
 type ApiKeysService struct {
 	client *Client
+	debug  bool
 }
 
 type ApiKeysAuthResponse struct {
@@ -32,11 +35,19 @@ type ApiKeysAuthResponse struct {
 }
 
 func (s *ApiKeysService) IsValidKey(ctx context.Context, key string) error {
-	resp, err := s.client.sendRequest(ctx, http.MethodGet, fmt.Sprintf(PathApiKeysAuth, ""), nil)
+	resp, err := s.client.sendRequest(ctx, http.MethodGet, fmt.Sprintf(PathApiKeysAuth, key), nil)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
+
+	if s.debug {
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			log.Printf("error reading body: %v \n", err)
+		}
+		log.Println("body: ", string(body))
+	}
 
 	if resp.StatusCode != http.StatusOK {
 		return ErrKeyInvalid

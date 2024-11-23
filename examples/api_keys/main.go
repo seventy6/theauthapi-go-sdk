@@ -28,7 +28,9 @@ func apiKeyMiddleware(client *theauthapi.Client) func(http.Handler) http.Handler
 					http.Error(w, "Error validating key", http.StatusInternalServerError)
 					return
 				}
+				log.Println("unauthorised request")
 				w.WriteHeader(http.StatusUnauthorized)
+				return
 			}
 
 			// Store the key in the request context
@@ -47,6 +49,7 @@ func main() {
 	accessToken := os.Getenv("ACCESS_TOKEN")
 	client := theauthapi.NewClient(
 		theauthapi.WithAccessToken(accessToken),
+		theauthapi.WithDebug(),
 	)
 
 	mux := http.NewServeMux()
