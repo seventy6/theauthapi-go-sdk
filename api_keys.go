@@ -4,51 +4,95 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
-
-	"github.com/joho/godotenv"
+	"time"
 )
 
-func init() {
-    // Load environment variables from .env file
-    if err := godotenv.Load(".env"); err != nil {
-        panic("Error 1 loading .env file")
-    }
-}
+var (
+	ErrKeyInvalid = errors.New("key is invalid")
+)
+
 type ApiKeysService struct {
-    client *Client
+	client *Client
+	debug  bool
 }
 
-func (s *ApiKeysService) IsValidKey(ctx context.Context, key string) (string, error) {
-    req, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/api-keys/auth/%s", s.client.BaseURL, key), nil)
-    if err != nil {
-        return "", err
-    }
-    req.Header.Set("x-api-key", s.client.AccessToken)
+type HTTPResponse struct {
+	StatusCode int
+}
 
-    resp, err := s.client.HTTPClient.Do(req)
-    if err != nil {
-        return "", err
-    }
-    defer resp.Body.Close()
+type ApiKeysAuthResponse struct {
+	Key             string          `json:"key"`
+	Name            string          `json:"name"`
+	CustomMetaData  json.RawMessage `json:"customMetaData"`
+	CustomAccountID json.RawMessage `json:"customAccountId"`
+	CustomUserID    string          `json:"customUserId"`
+	Env             string          `json:"env"`
+	CreatedAt       time.Time       `json:"createdAt"`
+	UpdatedAt       time.Time       `json:"updatedAt"`
+	Active          bool            `json:"isActive"`
+	ExpiresAt       time.Time       `json:"expiresAt"`
+	RateLimitConfig json.RawMessage `json:"rateLimitConfig"`
+	CreationContext json.RawMessage `json:"creationContext"`
 
-    // Read the body once
-    bodyBytes, err := io.ReadAll(resp.Body)
-    if err != nil {
-        return "", err
-    }
+	HTTPResponse HTTPResponse
+}
 
-    // Use the bytes for both JSON decoding and string conversion
-    var result struct {
-        Valid bool `json:"valid"`
-    }
-    if err := json.NewDecoder(bytes.NewReader(bodyBytes)).Decode(&result); err != nil {
-        return "", err
-    }
+func (s *ApiKeysService) GetValidKey(ctx context.Context, key string) (*ApiKeysAuthResponse, error) {
+	resp, err := s.client.sendRequest(ctx, http.MethodGet, fmt.Sprintf(PathApiKeysAuth, key), nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
 
-    bodyString := string(bodyBytes)
+	body, _ := io.ReadAll(resp.Body)
+	log.Println(string(body))
 
-    return bodyString, err
+	fakebody := bytes.NewBuffer(body)
+
+	log.Println(resp.StatusCode)
+
+	if resp.StatusCode != http.StatusOK {
+		log.Println(resp.StatusCode, http.StatusOK)
+		return nil, ErrKeyInvalid
+	}
+
+	apiResp := &ApiKeysAuthResponse{}
+	err = json.NewDecoder(fakebody).Decode(apiResp)
+	if err != nil {
+		return nil, err
+	}
+
+	apiResp.HTTPResponse = HTTPResponse{
+		StatusCode: resp.StatusCode,
+	}
+
+	return apiResp, nil
+
+}
+
+func (s *ApiKeysService) IsValidKey(ctx context.Context, key string) error {
+	resp, err := s.client.sendRequest(ctx, http.MethodGet, fmt.Sprintf(PathApiKeysAuth, key), nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if s.debug {
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			log.Printf("error reading body: %v \n", err)
+		}
+		log.Println("body: ", string(body))
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return ErrKeyInvalid
+	}
+
+	return nil
 }
