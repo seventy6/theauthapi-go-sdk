@@ -1,13 +1,15 @@
 package main
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"strconv"
 
-	"github.com/seventy6/theauthapi-go-sdk"
+	"github.com/matzhouse/theauthapi-go-sdk"
 )
 
 // CustomProxy handles the proxying of requests with header insertion
@@ -30,7 +32,6 @@ func NewCustomProxy(targetHost string, accessToken string) (*CustomProxy, error)
 
 	authAPIClient := theauthapi.NewClient(
 		theauthapi.WithAccessToken(accessToken),
-		theauthapi.WithDebug(),
 	)
 
 	cp := &CustomProxy{
@@ -57,15 +58,25 @@ func (p *CustomProxy) Director(req *http.Request) {
 		return
 	}
 
+	log.Println("found API key", apiKey)
+
 	// do auth request
 	data, err := p.authAPIClient.ApiKeys.GetValidKey(req.Context(), apiKey)
 	if err != nil {
-		log.Println("key not valid")
+		log.Println("key not valid", err)
+		return
+	}
+
+	headerData, err := json.Marshal(data)
+	if err != nil {
+		log.Println("data not valid")
 		return
 	}
 
 	// Add custom headers - this can be ex
-	req.Header.Set("x-key-name", data.Name)
+	req.Header.Del("X-Api-Key")
+	req.Header.Set("x-auth-response", strconv.Itoa(data.HTTPResponse.StatusCode))
+	req.Header.Set("x-auth-data", string(headerData))
 
 	// Optionally log the modified request
 	log.Printf("Proxying request to: %s with headers: %v\n", req.URL, req.Header)
@@ -78,9 +89,10 @@ func (p *CustomProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	// Example target host - replace with your actual target
-	targetHost := "http://localhost:8000"
+	targetHost := "http://localhost:5000"
 
 	accessToken := os.Getenv("ACCESS_TOKEN")
+	log.Println("access token:", accessToken)
 	proxy, err := NewCustomProxy(targetHost, accessToken)
 	if err != nil {
 		log.Fatal("Error creating proxy: ", err)
